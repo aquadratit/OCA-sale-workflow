@@ -3,8 +3,8 @@
 {
     "name": "Sale Order Secondary Unit",
     "summary": "Sale product in a secondary unit",
-    "version": "15.0.1.1.0",
-    "development_status": "Beta",
+    "version": "15.0.2.2.2",
+    "development_status": "Production/Stable",
     "category": "Sale",
     "website": "https://github.com/OCA/sale-workflow",
     "author": "Tecnativa, Odoo Community Association (OCA)",
@@ -14,6 +14,7 @@
     "auto_install": True,
     "depends": ["sale", "product_secondary_unit"],
     "data": [
+        "views/product_secondary_unit_views.xml",
         "views/product_views.xml",
         "views/sale_order_views.xml",
         "report/sale_report_templates.xml",

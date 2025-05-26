@@ -7,3 +7,6 @@
 * Sergio Teruel <sergio.teruel@tecnativa.com>
 * Lois Rilo <lois.rilo@forgeflow.com>
 * Juany Davila <juany.davila@forgeflow.com>
+* Italo Lopes <italo.lopes@camptocamp.com>
+* Ooops404 <https://www.ooops404.com>
+  * Eduard Brahas <eduardbrhas@outlook.it>

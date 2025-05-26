@@ -41,39 +41,40 @@ class SaleOrder(models.Model):
 
 
 class SaleOrderLine(models.Model):
-    _inherit = "sale.order.line"
+    _inherit = ["sale.order.line", "product.elaboration.mixin"]
+    _name = "sale.order.line"
 
-    elaboration_id = fields.Many2one(
-        comodel_name="product.elaboration", string="Elaboration", ondelete="restrict"
-    )
-    elaboration_note = fields.Char(
-        store=True,
-        compute="_compute_elaboration_note",
-        readonly=False,
-    )
-    is_elaboration = fields.Boolean(
-        store=True,
-        compute="_compute_is_elaboration",
-        readonly=False,
-    )
     date_order = fields.Datetime(related="order_id.date_order", string="Date")
+    route_id = fields.Many2one(compute="_compute_route_id", store=True, readonly=False)
+    elaboration_profile_id = fields.Many2one(
+        related="product_id.elaboration_profile_id"
+    )
+    elaboration_price_unit = fields.Float(
+        "Elab. Price", compute="_compute_elaboration_price_unit", store=True
+    )
 
-    @api.depends("elaboration_id")
-    def _compute_elaboration_note(self):
+    def get_elaboration_stock_route(self):
+        self.ensure_one()
+        return self.elaboration_ids.route_ids[:1]
+
+    @api.depends("elaboration_ids")
+    def _compute_route_id(self):
         for line in self:
-            line.elaboration_note = line.elaboration_id.name
+            line.route_id = line.get_elaboration_stock_route()
+
+    @api.depends("elaboration_ids", "order_id.pricelist_id")
+    def _compute_elaboration_price_unit(self):
+        for line in self:
+            elab_price = 0.0
+            for elaboration in line.elaboration_ids:
+                elab_price += elaboration.product_id.with_context(
+                    pricelist=line.order_id.pricelist_id.id,
+                    uom=elaboration.product_id.uom_id.id,
+                ).price
+            line.elaboration_price_unit = elab_price
 
     def _prepare_invoice_line(self, **optional_values):
         vals = super()._prepare_invoice_line(**optional_values)
         if self.is_elaboration:
             vals["name"] = "{} - {}".format(self.order_id.name, self.name)
         return vals
-
-    @api.depends("product_id")
-    def _compute_is_elaboration(self):
-        """We use computed instead of a related field because related fields are not
-        initialized with their value on one2many which related field is the
-        inverse_name, so with this we get immediately the value on NewIds.
-        """
-        for line in self:
-            line.is_elaboration = line.product_id.is_elaboration

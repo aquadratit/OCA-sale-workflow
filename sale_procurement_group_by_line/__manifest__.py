@@ -6,13 +6,14 @@
 {
     "name": "Sale Procurement Group by Line",
     "summary": "Base module for multiple procurement group by Sale order",
-    "version": "15.0.1.2.0",
+    "version": "15.0.1.2.1",
     "author": "Camptocamp,"
     "ForgeFlow,"
     "Serpent Consulting Services Pvt. Ltd.,"
     "Odoo Community Association (OCA)",
     "category": "Warehouse",
     "license": "AGPL-3",
+    "development_status": "Production/Stable",
     "website": "https://github.com/OCA/sale-workflow",
     "depends": ["sale_stock"],
     "installable": True,

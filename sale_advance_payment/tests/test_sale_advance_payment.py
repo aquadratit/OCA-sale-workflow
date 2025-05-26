@@ -85,12 +85,22 @@ class TestSaleAdvancePayment(common.TransactionCase):
             cls.currency_euro.active = True
             cls.active_euro = True
         cls.currency_usd = cls.env["res.currency"].search([("name", "=", "USD")])
-        cls.currency_rate = cls.env["res.currency.rate"].create(
-            {
-                "rate": 1.20,
-                "currency_id": cls.currency_usd.id,
-            }
+        cls.currency_rate = cls.env["res.currency.rate"].search(
+            [
+                ("currency_id", "=", cls.currency_usd.id),
+                ("name", "=", fields.Date.today()),
+            ]
         )
+        if cls.currency_rate:
+            cls.currency_rate.write({"rate": 1.20})
+        else:
+            cls.currency_rate = cls.env["res.currency.rate"].create(
+                {
+                    "rate": 1.20,
+                    "currency_id": cls.currency_usd.id,
+                    "name": fields.Date.today(),
+                }
+            )
 
         cls.journal_eur_bank = cls.env["account.journal"].create(
             {
@@ -229,6 +239,23 @@ class TestSaleAdvancePayment(common.TransactionCase):
         advance_payment_4.make_advance_payment()
         self.assertEqual(self.sale_order_1.amount_residual, 2580)
 
+        # Check that the outbound amount is not greated than the
+        # amount paid in advanced (in EUR)
+        with self.assertRaises(ValidationError):
+            advance_payment_5 = (
+                self.env["account.voucher.wizard"]
+                .with_context(**context_payment)
+                .create(
+                    {
+                        "journal_id": self.journal_eur_bank.id,
+                        "payment_type": "outbound",
+                        "amount_advance": 850.01,
+                        "order_id": self.sale_order_1.id,
+                    }
+                )
+            )
+            advance_payment_5.make_advance_payment()
+
         # Confirm Sale Order
         self.sale_order_1.action_confirm()
 
@@ -350,3 +377,33 @@ class TestSaleAdvancePayment(common.TransactionCase):
         self.assertEqual(invoice.amount_residual, 0.0)
         self.assertEqual(self.sale_order_1.amount_residual, 1600)
         self.assertEqual(invoice.amount_residual, 0)
+
+    def test_04_residual_amount_credit_note(self):
+        self.sale_order_1.action_confirm()
+        self.sale_order_1._create_invoices()
+        invoice = self.sale_order_1.invoice_ids[0]
+        invoice.invoice_date = fields.Date.today()
+        invoice.action_post()
+        self.env["account.payment.register"].with_context(
+            active_model="account.move", active_ids=invoice.ids
+        ).create(
+            {
+                "amount": 3600.0,
+                "group_payment": True,
+                "payment_difference_handling": "open",
+            }
+        )._create_payments()
+        self.assertEqual(self.sale_order_1.amount_residual, 0)
+        credit_note = invoice._reverse_moves()
+        credit_note.invoice_date = fields.Date.today()
+        credit_note.action_post()
+        self.env["account.payment.register"].with_context(
+            active_model="account.move", active_ids=credit_note.ids
+        ).create(
+            {
+                "amount": 3600.0,
+                "group_payment": True,
+                "payment_difference_handling": "open",
+            }
+        )._create_payments()
+        self.assertEqual(self.sale_order_1.amount_residual, 3600)

@@ -2,9 +2,10 @@
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 from datetime import timedelta
 
+from dateutil.relativedelta import relativedelta
+
 from odoo import _, fields, models
-from odoo.exceptions import RedirectWarning
-from odoo.tools.date_utils import relativedelta
+from odoo.exceptions import ValidationError
 
 
 class ResPartner(models.Model):
@@ -20,13 +21,10 @@ class ResPartner(models.Model):
         sale_planner_forward_months = self.env.company.sale_planner_forward_months
         # TODO: Get default values from res.config.settings
         action["context"] = {
-            "no_mail_to_attendees": False
-            if self.env.company.sale_planner_mail_to_attendees
-            else True,
-            "calendar_event_primary_only": True,
             "default_target_partner_id": self.id,
             "default_categ_ids": [(4, categ.id)],
-            "default_location": self._display_address(),
+            # Passing True omits the partner name, ensuring precise calculation of GPS location.
+            "default_location": self._display_address(True).replace("\n", " "),
             "default_duration": categ.duration,
             "default_name": categ.name,
             "default_start": fields.Datetime.now(),
@@ -49,7 +47,15 @@ class ResPartner(models.Model):
                     ],
                 )
             ],
+            "choose_unlink_method": True,
         }
+        if not self.env.company.sale_planner_mail_to_attendees:
+            action["context"].update(
+                {
+                    "no_mail_to_attendees": True,
+                    "dont_notify": True,
+                }
+            )
         action["view_mode"] = "tree,form"
         action["view_id"] = False
         action["views"] = []
@@ -57,6 +63,7 @@ class ResPartner(models.Model):
             ("target_partner_id", "=", self.id),
             ("recurrency", "=", True),
             ("recurrence_id.until", ">", fields.Date.today()),
+            ("is_base_recurrent_event", "=", True),
         ]
         return action
 
@@ -66,25 +73,18 @@ class ResPartner(models.Model):
             and vals.get("user_id")
             and not self.env.context.get("skip_sale_planner_check", False)
         ):
-            calendar_events = (
-                self.env["calendar.event"]
-                .with_context(calendar_event_primary_only=True)
-                .search(
-                    [
-                        ("target_partner_id", "in", self.ids),
-                        ("recurrency", "!=", False),
-                        ("user_id", "!=", vals["user_id"]),
-                    ]
-                )
+            calendar_events = self.env["calendar.event"].search(
+                [
+                    ("target_partner_id", "in", self.ids),
+                    ("recurrency", "!=", False),
+                    ("user_id", "!=", vals["user_id"]),
+                    ("is_base_recurrent_event", "=", True),
+                ]
             )
             if calendar_events:
-                action = self.env["ir.actions.act_window"]._for_xml_id(
-                    "sale_planner_calendar.action_sale_planner_calendar_reassign_wiz"
-                )
-                action["target"] = "new"
                 msg = _(
                     "This partner has sale planned events\n"
                     "You must change salesperson from the planner wizard"
                 )
-                raise RedirectWarning(msg, action, _("Go to the planner wizard"))
-        return super(ResPartner, self).write(vals)
+                raise ValidationError(msg)
+        return super().write(vals)
